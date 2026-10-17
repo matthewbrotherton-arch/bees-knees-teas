@@ -222,7 +222,6 @@
     }
 
     function initApp() {
-      // Load local cache immediately so screen populates instantly
       const cached = localStorage.getItem('beesKneesCache');
       if (cached) {
         try { const p = JSON.parse(cached); if (p && Array.isArray(p.diary)) state = p; } catch(e){}
@@ -360,8 +359,7 @@
     function renderPersonSnackColumn(id, items) {
       const box = document.getElementById(id);
       if (!box) return;
-      if (items.length === 0) { box.innerHTML = '<p class="text-[11px] text-stone-400 italic py-2 text-center">Nothing logged.</p>@'; return; }
-      // Clean up stray trailing characters if present
+      if (items.length === 0) { box.innerHTML = '<p class="text-[11px] text-stone-400 italic py-2 text-center">Nothing logged.</p>'; return; }
       box.innerHTML = items.map(function(item) {
         return '<div class="bg-stone-50 p-2 rounded-xl border flex justify-between items-center text-xs"><span><b>' + escapeHtml(item.title) + '</b> (' + item.totalCalories + ' kcal)</span><button type="button" onclick="deleteDiaryItem(\'' + item.id + '\')" class="text-red-400 font-bold px-1">×</button></div>';
       }).join('');
