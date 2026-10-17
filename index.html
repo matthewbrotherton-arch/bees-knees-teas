@@ -44,7 +44,7 @@
     </button>
   </header>
 
-  <!-- MAIN CONTAINER (Full width optimized for phones) -->
+  <!-- MAIN CONTAINER -->
   <main class="max-w-xl mx-auto px-3 sm:px-4 pt-4 space-y-4">
 
     <!-- ================= TAB 1: DIARY & SPLIT CALORIE COUNTER ================= -->
@@ -222,6 +222,12 @@
     }
 
     function initApp() {
+      // Load local cache immediately so screen populates instantly
+      const cached = localStorage.getItem('beesKneesCache');
+      if (cached) {
+        try { const p = JSON.parse(cached); if (p && Array.isArray(p.diary)) state = p; } catch(e){}
+      }
+      renderAll();
       syncWithSheet();
     }
 
@@ -239,6 +245,7 @@
         const json = await res.json();
         if (json && json.status === 'ok' && json.data) {
           state = json.data;
+          localStorage.setItem('beesKneesCache', JSON.stringify(state));
           renderAll();
           setSyncStatus('Synced with Sheet ✓', false);
         }
@@ -254,6 +261,7 @@
         const json = await res.json();
         if (json && json.status === 'ok' && json.data) {
           state = json.data;
+          localStorage.setItem('beesKneesCache', JSON.stringify(state));
           renderAll();
           setSyncStatus('Synced with Sheet ✓', false);
         }
@@ -263,14 +271,18 @@
     }
 
     function setSyncStatus(msg, spinning) {
-      document.getElementById('syncStatusText').textContent = msg;
-      document.getElementById('syncSpinner').textContent = spinning ? '⏳' : '🔄';
+      const statusEl = document.getElementById('syncStatusText');
+      const spinEl = document.getElementById('syncSpinner');
+      if (statusEl) statusEl.textContent = msg;
+      if (spinEl) spinEl.textContent = spinning ? '⏳' : '🔄';
     }
 
     function switchTab(tab) {
       ['diary', 'recipes', 'bank', 'shopping', 'settings'].forEach(function(t) {
-        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
-        document.getElementById('nav-' + t).className = (t === tab) ? 'flex flex-col items-center text-sage-600 font-bold' : 'flex flex-col items-center text-stone-400';
+        const sec = document.getElementById('tab-' + t);
+        const nav = document.getElementById('nav-' + t);
+        if (sec) sec.classList.toggle('hidden', t !== tab);
+        if (nav) nav.className = (t === tab) ? 'flex flex-col items-center text-sage-600 font-bold' : 'flex flex-col items-center text-stone-400';
       });
       renderAll();
     }
@@ -284,10 +296,13 @@
 
     function renderWeekStrip() {
       const strip = document.getElementById('weekStrip');
+      if (!strip) return;
       strip.innerHTML = '';
       const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      document.getElementById('currentMonthLabel').textContent = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(weekStartDate);
-      document.getElementById('fullDatePicker').value = selectedDateStr;
+      const monthLabel = document.getElementById('currentMonthLabel');
+      const datePicker = document.getElementById('fullDatePicker');
+      if (monthLabel) monthLabel.textContent = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(weekStartDate);
+      if (datePicker) datePicker.value = selectedDateStr;
 
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStartDate); d.setDate(d.getDate() + i);
@@ -317,20 +332,26 @@
     function renderDiary() {
       const dateObj = new Date(selectedDateStr + 'T12:00:00');
       const readable = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
-      document.getElementById('selectedDateReadable').textContent = readable;
-      document.getElementById('selectedDateReadableMeals').textContent = readable;
+      const selRead = document.getElementById('selectedDateReadable');
+      const selReadMeals = document.getElementById('selectedDateReadableMeals');
+      if (selRead) selRead.textContent = readable;
+      if (selReadMeals) selReadMeals.textContent = readable;
 
       const dayEntries = (state.diary || []).filter(function(e) { return e.dateStr === selectedDateStr; });
       const mattTotal = dayEntries.filter(function(e) { return e.person === 'Matt' || e.person === 'Both'; }).reduce(function(s, e) { return s + (Number(e.totalCalories) || 0); }, 0);
       const louTotal = dayEntries.filter(function(e) { return e.person === 'Lou' || e.person === 'Both'; }).reduce(function(s, e) { return s + (Number(e.totalCalories) || 0); }, 0);
 
-      const mattT = Number(state.settings.mattCalorieTarget) || 2200;
-      const louT = Number(state.settings.louCalorieTarget) || 1800;
+      const mattT = Number(state.settings && state.settings.mattCalorieTarget) || 2200;
+      const louT = Number(state.settings && state.settings.louCalorieTarget) || 1800;
 
-      document.getElementById('mattTargetDisplay').textContent = mattT + ' kcal';
-      document.getElementById('louTargetDisplay').textContent = louT + ' kcal';
-      document.getElementById('mattCalorieTotal').textContent = mattTotal;
-      document.getElementById('louCalorieTotal').textContent = louTotal;
+      const mDisp = document.getElementById('mattTargetDisplay');
+      const lDisp = document.getElementById('louTargetDisplay');
+      const mTot = document.getElementById('mattCalorieTotal');
+      const lTot = document.getElementById('louCalorieTotal');
+      if (mDisp) mDisp.textContent = mattT + ' kcal';
+      if (lDisp) lDisp.textContent = louT + ' kcal';
+      if (mTot) mTot.textContent = mattTotal;
+      if (lTot) lTot.textContent = louTotal;
 
       renderPersonSnackColumn('mattSnacksList', dayEntries.filter(function(e) { return e.person === 'Matt' || e.person === 'Both'; }));
       renderPersonSnackColumn('louSnacksList', dayEntries.filter(function(e) { return e.person === 'Lou' || e.person === 'Both'; }));
@@ -338,29 +359,40 @@
 
     function renderPersonSnackColumn(id, items) {
       const box = document.getElementById(id);
-      if (items.length === 0) { box.innerHTML = '<p class="text-[11px] text-stone-400 italic py-2 text-center">Nothing logged.</p>'; return; }
+      if (!box) return;
+      if (items.length === 0) { box.innerHTML = '<p class="text-[11px] text-stone-400 italic py-2 text-center">Nothing logged.</p>@'; return; }
+      // Clean up stray trailing characters if present
       box.innerHTML = items.map(function(item) {
-        return '<div class="bg-stone-50 p-2 rounded-xl border flex justify-between items-center text-xs"><span><b>' + escapeHtml(item.title) + '</b> (' + item.totalCalories + ' kcal)</span><button type="button" onclick="deleteDiaryItem(\'' + item.id + '\')" class="text-red-400 font-bold">×</button></div>';
+        return '<div class="bg-stone-50 p-2 rounded-xl border flex justify-between items-center text-xs"><span><b>' + escapeHtml(item.title) + '</b> (' + item.totalCalories + ' kcal)</span><button type="button" onclick="deleteDiaryItem(\'' + item.id + '\')" class="text-red-400 font-bold px-1">×</button></div>';
       }).join('');
     }
 
     function openCalorieQuickModal(person) {
       currentQuickPerson = person;
-      document.getElementById('btnQuickMatt').className = person === 'Matt' ? 'py-2 rounded-xl font-bold text-xs bg-sky-600 text-white' : 'py-2 rounded-xl font-bold text-xs bg-stone-100 text-stone-600';
-      document.getElementById('btnQuickLou').className = person === 'Lou' ? 'py-2 rounded-xl font-bold text-xs bg-rose-500 text-white' : 'py-2 rounded-xl font-bold text-xs bg-stone-100 text-stone-600';
-      document.getElementById('btnQuickBoth').className = person === 'Both' ? 'py-2 rounded-xl font-bold text-xs bg-sage-600 text-white' : 'py-2 rounded-xl font-bold text-xs bg-stone-100 text-stone-600';
-      document.getElementById('modalQuickCalorie').classList.remove('hidden');
+      const bM = document.getElementById('btnQuickMatt');
+      const bL = document.getElementById('btnQuickLou');
+      const bB = document.getElementById('btnQuickBoth');
+      if (bM) bM.className = person === 'Matt' ? 'py-2 rounded-xl font-bold text-xs bg-sky-600 text-white' : 'py-2 rounded-xl font-bold text-xs bg-stone-100 text-stone-600';
+      if (bL) bL.className = person === 'Lou' ? 'py-2 rounded-xl font-bold text-xs bg-rose-500 text-white' : 'py-2 rounded-xl font-bold text-xs bg-stone-100 text-stone-600';
+      if (bB) bB.className = person === 'Both' ? 'py-2 rounded-xl font-bold text-xs bg-sage-600 text-white' : 'py-2 rounded-xl font-bold text-xs bg-stone-100 text-stone-600';
+      const modal = document.getElementById('modalQuickCalorie');
+      if (modal) modal.classList.remove('hidden');
     }
     function setQuickCaloriePerson(p) { openCalorieQuickModal(p); }
 
     function confirmQuickCalorieLog() {
-      const name = document.getElementById('quickFoodNameInput').value.trim();
-      const cals = Number(document.getElementById('quickFoodCaloriesInput').value) || 0;
+      const nameIn = document.getElementById('quickFoodNameInput');
+      const calsIn = document.getElementById('quickFoodCaloriesInput');
+      if (!nameIn || !calsIn) return;
+      const name = nameIn.value.trim();
+      const cals = Number(calsIn.value) || 0;
       if (!name) return alert('Enter food name');
       const entry = { id: 'diary_' + Date.now(), dateStr: selectedDateStr, entryType: 'snack', title: name, totalCalories: cals, person: currentQuickPerson };
       state.diary.push(entry);
       sendBackendAction({ action: 'addDiaryEntry', entry: entry });
       closeModal('modalQuickCalorie');
+      nameIn.value = '';
+      calsIn.value = '';
     }
 
     async function deleteDiaryItem(id) {
@@ -371,13 +403,15 @@
 
     function renderRecipes() {
       const list = document.getElementById('recipesList');
+      if (!list) return;
       list.innerHTML = (state.recipes || []).map(function(r) {
-        return '<div class="bg-white p-3 rounded-xl border flex justify-between items-center"><span><b>' + escapeHtml(r.title) + '</b></span></div>';
+        return '<div class="bg-white p-3 rounded-xl border flex justify-between items-center text-xs"><span><b>' + escapeHtml(r.title) + '</b></span></div>';
       }).join('') || '<p class="text-xs text-stone-400">No recipes.</p>';
     }
 
     function renderCalorieBank() {
       const list = document.getElementById('calorieBankList');
+      if (!list) return;
       list.innerHTML = (state.calorieBank || []).map(function(i) {
         return '<div class="bg-white p-3 rounded-xl border flex justify-between items-center text-xs"><span>' + escapeHtml(i.foodName) + ' (' + i.calories + ' kcal)</span><button type="button" onclick="deleteBankItem(\'' + i.id + '\')" class="text-red-400 font-bold">🗑️</button></div>';
       }).join('') || '<p class="text-xs text-stone-400">Bank is empty.</p>';
@@ -390,20 +424,27 @@
     }
 
     function saveManualBankItem() {
-      const name = document.getElementById('bankFoodInput').value.trim();
-      const port = document.getElementById('bankPortionInput').value.trim() || '1 serving';
-      const cals = Number(document.getElementById('bankCaloriesInput').value) || 0;
+      const nameIn = document.getElementById('bankFoodInput');
+      const portIn = document.getElementById('bankPortionInput');
+      const calsIn = document.getElementById('bankCaloriesInput');
+      if (!nameIn || !calsIn) return;
+      const name = nameIn.value.trim();
+      const port = (portIn && portIn.value.trim()) || '1 serving';
+      const cals = Number(calsIn.value) || 0;
       if (!name || !cals) return;
       const item = { id: 'cb_' + Date.now(), foodName: name, portionDescription: port, calories: cals };
       state.calorieBank.push(item);
       sendBackendAction({ action: 'saveCalorieBankItem', item: item });
-      document.getElementById('bankFoodInput').value = '';
-      document.getElementById('bankCaloriesInput').value = '';
+      nameIn.value = '';
+      if (portIn) portIn.value = '';
+      calsIn.value = '';
     }
 
     function saveSettings() {
-      const mattT = Number(document.getElementById('mattTargetInput').value) || 2200;
-      const louT = Number(document.getElementById('louTargetInput').value) || 1800;
+      const mattIn = document.getElementById('mattTargetInput');
+      const louIn = document.getElementById('louTargetInput');
+      const mattT = Number(mattIn ? mattIn.value : 2200) || 2200;
+      const louT = Number(louIn ? louIn.value : 1800) || 1800;
       state.settings.mattCalorieTarget = mattT;
       state.settings.louCalorieTarget = louT;
       sendBackendAction({ action: 'saveTargets', mattCalorieTarget: mattT, louCalorieTarget: louT });
@@ -411,7 +452,7 @@
     }
 
     function openRecipeForm() { alert('Recipe modal shortcut'); }
-    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    function closeModal(id) { const m = document.getElementById(id); if (m) m.classList.add('hidden'); }
     function escapeHtml(str) { return String(str || '').replace(/[&<>"']/g, function(m) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]; }); }
   </script>
 </body>
